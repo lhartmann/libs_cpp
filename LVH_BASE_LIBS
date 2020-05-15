@@ -1,0 +1,86 @@
+#! /bin/bash
+LVH_BASE_LIBS="/home/lucas.hartmann/Documentos/cpp/LVH_BASE_LIBS"
+
+link_file() {
+	local LOCAL="$1"
+	echo -n "Checking $LOCAL: "
+	local LIB="$LVH_BASE_LIBS/$LOCAL"
+	if [ -r "$LIB" ]; then
+		echo -n "Library file. "
+		if [ -e "$LOCAL" ]; then
+			if [ -L "$LOCAL" ]; then
+				if [ "$(readlink "$LOCAL")" == "$LIB" ]; then
+					echo "Already linked."
+					return 0
+				fi
+			fi
+			while read -p "Replace local? " ANS; do
+				if [ "$ANS" = y -o "$ANS" = Y ]; then
+					rm -f "$LOCAL"
+					break
+				fi
+				if [ "$ANS" = n -o "$ANS" = N ]; then
+					break
+				fi
+				diff "$LIB" "$LOCAL"
+			done
+		fi
+		if [ ! -e "$LOCAL" ]; then
+			echo "Link."
+			ln -sf "$LIB" "$LOCAL"
+		else
+			echo "Skip."
+		fi
+	else
+		echo "Not in library."
+	fi
+}
+
+link_included_from() {
+	local LIST="$(sed -rn 's:^#[ \t]*include[ \t]+["<](.*)\.h[">].*:\1:p' < "$1")"
+	echo "$LIST" | while read LOCAL; do
+		link_file "$LOCAL.h"
+		link_file "$LOCAL.cpp"
+	done
+}
+
+link_existing() {
+	for LOCAL in *cpp *h; do
+		link_file "$LOCAL"
+	done
+}
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+	"-h"|"--help")
+		echo "LVH_BASE_LIBS: Create links to the common library folder."
+		echo "-i <source_file>   Automatically links all common files #included from source_file."
+		echo "-e                 Automatically links all common files in the current folder."
+		echo "-l                 List all library files."
+		exit 0
+		;;
+	
+	"-i")
+		LOCAL="$2"
+		shift 2 || exit 1
+		link_included_from "$LOCAL"
+		;;
+	
+	"-e")
+		link_existing
+		shift
+		;;
+
+	"-l")
+		/bin/ls "$LVH_BASE_LIBS"
+		shift
+		;;
+	
+	*)
+		PRE="$1"
+		shift || exit 1
+		link_file "$PRE.h"
+		link_file "$PRE.cpp"
+		;;
+	esac
+done
